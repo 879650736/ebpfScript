@@ -1,0 +1,14 @@
+#!/usr/local/bin/bpftrace
+
+// 这个脚本会在 CPU 0 上每 10 毫秒（99Hz）打印当前进程的 PID 和调用栈信息。
+profile:hz:99
+/comm == "dd" /
+{
+    @[kstack] = count();  // 统计每个调用栈的出现次数
+}
+
+END 
+{
+    printf("\n内核调用栈统计（dd 进程）:\n");
+    print(@, 10);  // 输出前10个最频繁的调用栈
+}

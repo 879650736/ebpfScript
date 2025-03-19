@@ -1,0 +1,27 @@
+#!/usr/local/bin/bpftrace
+
+tracepoint:syscalls:sys_enter_execve
+{
+    printf("sys_enter_execve\n");
+    printf("%d\n", pid);
+    printf("%s -> %s\n", comm,str(args->filename));
+}
+tracepoint:syscalls:sys_enter_fork
+{
+    printf("sys_enter_fork\n");
+    printf("%d\n", pid);
+    printf("%s\n", comm);
+}
+tracepoint:syscalls:sys_enter_clone
+{
+    printf("sys_enter_clone\n");
+    printf("%d\n", pid);
+    printf("%s\n", comm);
+}
+tracepoint:syscalls:sys_enter_vfork
+{
+    printf("sys_enter_vfork\n");
+    printf("%d\n", pid);
+    printf("%s\n", comm);
+    
+}

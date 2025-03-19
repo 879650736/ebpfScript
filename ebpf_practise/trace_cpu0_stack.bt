@@ -1,0 +1,9 @@
+#!/usr/local/bin/bpftrace
+
+// 这个脚本会在 CPU 0 上每 10 毫秒（99Hz）打印当前进程的 PID 和调用栈信息。
+profile:hz:99
+/cpu == 0/
+{
+    @stack = kstack();
+    printf("%d %s\n", pid, @stack);
+}

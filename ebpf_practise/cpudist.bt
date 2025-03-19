@@ -1,0 +1,26 @@
+#!/usr/local/bin/bpftrace
+
+BEGIN
+{
+    printf("Tracing CPU runtime distribution... Hit Ctrl-C to end.\n");
+}
+
+// sched_stat_runtime 在任务累积运行时间更新时触发
+tracepoint:sched:sched_stat_runtime
+{
+    $runtime_ns = args->runtime;  // 获取运行时间（纳秒）
+    $runtime_us = $runtime_ns / 1000;  // 转换为微秒
+    
+    // 过滤无效值（如 runtime=0）
+    if ($runtime_us > 0) {
+        @us = hist($runtime_us);
+    }
+}
+
+END
+{
+    printf("\nCPU runtime distribution (usecs):\n");
+    print(@us);
+    delete(@us);  // 清除统计数据
+    printf("Tracing finished.\n");
+}

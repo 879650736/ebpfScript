@@ -1,0 +1,7 @@
+#!/usr/local/bin/bpftrace
+
+tracepoint:irq:softirq_entry
+{
+    printf("softirq_entry\n");
+    printf("%s\n", comm);
+}

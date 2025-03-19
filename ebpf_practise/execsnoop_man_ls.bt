@@ -1,0 +1,19 @@
+#!/usr/local/bin/bpftrace
+/*
+tracepoint:syscalls:sys_enter_execve
+{
+    printf("%d %s\n", pid, str(args->filename));
+
+}
+*/
+
+
+tracepoint:syscalls:sys_enter_execve
+/ curtask->parent->comm == "man" /  // 直接比较字符串，无需 str()
+{
+    printf("父进程名: %s (PID: %d) -> 子进程 PID: %d, 执行命令: %s\n",
+        curtask->parent->comm,          // 直接使用 comm 字段
+        curtask->parent->pid,           // 父进程 PID
+        pid,                            // 子进程 PID
+        str(args->filename));           // 子进程路径
+}
