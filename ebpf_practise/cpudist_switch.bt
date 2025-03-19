@@ -1,0 +1,18 @@
+#!/usr/local/bin/bpftrace
+
+tracepoint:syscalls:sys_enter_sched_yield
+{
+    @active[comm] = count();
+}
+tracepoint:sched:sched_switch
+{
+    @passive[args->prev_comm] = count();
+}
+END
+{
+    printf("\n%-20s %s\n", "COMM", "ACTIVE_COUNT");
+    print(@active);
+
+    printf("\n%-20s %s\n", "COMM", "PASSIVE_COUNT");
+    print(@passive);
+}
