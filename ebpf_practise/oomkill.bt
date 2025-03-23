@@ -1,0 +1,18 @@
+#!/usr/local/bin/bpftrace
+
+#include <linux/oom.h>
+
+BEGIN
+{
+    printf("Tracing OOM kills... Hit Ctrl-C to end.\n");
+}
+
+kprobe:oom_kill_process
+{
+    $oc = (struct oom_control *)arg1;
+    time("%H:%M:%S ");
+    printf("Triggered by PID %d (\"%s\"), ",pid, comm);
+    printf("OOM kill of PID %d (\"%s\"), %d pages, loadavg: ",
+              $oc->chosen->pid, $oc->chosen->comm, $oc->totalpages);
+    cat ("/proc/loadavg");
+}
