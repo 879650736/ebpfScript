@@ -49,13 +49,23 @@ tracepoint:vmscan:mm_vmscan_write_folio{
 BEGIN{
     printf("%-10s %10s %12s %12s %6s %9s\n", "TIME",
      "S-SLABms", "D_RECLAIMms", "M_RECLAIMms", "KSWAPD", "WRITEPAGE");
+    @header_count = 1;
 }
 
 interval:s:1{
+    @header_count ++;
+    // 每20次触发打印一次表头
+    if (@header_count > 20) {
+        printf("%-10s %10s %12s %12s %6s %9s\n", "TIME",
+             "S-SLABms", "D_RECLAIMms", "M_RECLAIMms", "KSWAPD", "WRITEPAGE");
+        @header_count = @header_count - 20;
+    }
+    
     time("%H:%M:%S");
     printf("     %10d %12d %12d %6d %9d\n",
     @sum_ss/1000000, @sum_dr/1000000, @sum_mr/1000000,
      @count_wk, @count_wp);
+    
     clear(@sum_ss); clear(@sum_dr); clear(@sum_mr);
     clear(@count_wk); clear(@count_wp);
 }

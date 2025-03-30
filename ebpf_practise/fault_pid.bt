@@ -1,0 +1,19 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+    printf("Tracing page faults for PID %d...\n", $1);
+    @target_pid = (uint32)$1;   // 通过命令行参数指定目标进程PID
+}
+
+// 监控缺页错误事件（用户态）
+tracepoint:exceptions:page_fault_user 
+/pid == @target_pid/
+{
+    // 记录调用栈与缺页类型的关联统计
+    @[kstack(10), ustack(10)] = count();
+}
+
+END {
+    printf("\nPage Fault Statistics:\n");
+    print(@);
+}

@@ -1,0 +1,9 @@
+#!/usr/local/bin/bprtrace
+
+BEGIN{
+    printf("Tracing Huge Page faults per process.. Hit Ctrl-C to end.\n");
+}
+
+kprobe:hugetlb_fault{
+    @[pid, comm] = count();
+}
