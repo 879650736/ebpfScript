@@ -1,0 +1,37 @@
+#!/usr/bin/bpftrace
+
+
+/* 需先确认目标进程的 libc 中存在 __brk 符号 */
+BEGIN {
+    printf("%-8s %-16s %-6s %-8s %s\n", 
+        "TIME", "COMM", "PID", "SIZE", "DETAIL");
+}
+
+// 挂钩 libc 的 __brk 函数入口
+uprobe:/usr/lib/libc.so.6:__brk {
+    @old_brk[pid] = reg("di");  // 用户态参数通过寄存器传递
+}
+
+// 挂钩 __brk 函数返回
+uretprobe:/usr/lib/libc.so.6:__brk {
+    $ret = reg("ax");     // x86_64 返回值在 RAX
+    $pid = pid;
+    $comm = comm;
+    $old = @old_brk[$pid];
+
+    if ($ret == $old) {   // 未发生扩展
+        delete(@old_brk[$pid]);
+    }
+
+    $heap_growth = $ret - $old;
+    time("%H:%M:%S ");
+    printf("%-8s %-16s %-6d %-8lu [old:%p new:%p]\n", 
+        strftime("%H:%M:%S", nsecs), 
+        $comm,
+        $pid,
+        $heap_growth,
+        $old,
+        $ret);
+
+    
+}

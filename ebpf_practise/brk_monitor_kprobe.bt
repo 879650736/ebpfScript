@@ -1,0 +1,46 @@
+#!/usr/bin/bpftrace
+
+BEGIN {
+    printf("%-8s %-16s %-6s %-8s %s\n", 
+        "TIME", "COMM", "PID", "SIZE", "DETAIL");
+}
+
+// 内核函数入口探测 (以 x86_64 的 __x64_sys_brk 为例)
+kprobe:__x64_sys_brk {
+    $mm = ((struct task_struct*)curtask)->mm;
+    @old_brk[pid] = (uint64)$mm->brk;
+    @requested[pid] = (uint64)reg("di");  // x86_64 第一个参数通过 di 寄存器传递
+
+}
+
+// 内核函数返回探测
+kretprobe:__x64_sys_brk {
+    $ret = (uint64)retval;
+    $pid = pid;
+    $comm = comm;
+
+    $old = (uint64)@old_brk[$pid];
+    $req = (uint64)@requested[$pid];
+
+    if ($ret <= $old) {  // 错误或未扩展
+        delete(@old_brk[$pid]);
+        delete(@requested[$pid]);
+    }
+
+    $heap_growth = $ret - $old;
+    time("%H:%M:%S ");
+    printf("%-8s %-16s %-6d %-8lu [old:%p new:%p req:%p delta:%ld]\n", 
+        strftime("%H:%M:%S", nsecs), 
+        $comm,
+        $pid,
+        $heap_growth,
+        $old,
+        $ret,
+        $req,
+        $ret - $req);
+
+}
+
+END {
+    printf("\n监控结束\n");
+}
