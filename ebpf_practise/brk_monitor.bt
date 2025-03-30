@@ -1,0 +1,46 @@
+#!/usr/bin/bpftrace
+
+
+BEGIN {
+    printf("%-8s %-16s %-6s %-8s %s\n", 
+        "TIME", "COMM", "PID", "SIZE", "DETAIL");
+}
+
+tracepoint:syscalls:sys_enter_brk {
+
+    @old_brk[pid] = (uint64)curtask->mm->brk;
+    @requested[pid] = (uint64)args->brk;
+}
+
+tracepoint:syscalls:sys_exit_brk {
+    $ret = (uint64)args->ret;
+    $pid = pid;
+    $comm = comm;
+
+    $old = (uint64)@old_brk[$pid];
+    $req = (uint64)@requested[$pid];
+
+    if ($ret < 0 || $ret <= $old) {
+        delete(@old_brk[$pid]);
+        delete(@requested[$pid]);
+    }
+
+    $heap_growth = $ret - $old;
+    $req_size = $req - $old;
+
+    time("%H:%M:%S ");
+    printf("%-8s %-16s %-6d %-8lu [old:%p new:%p req:%p delta:%ld]\n", 
+        strftime("%H:%M:%S", nsecs), 
+        $comm,
+        $pid,
+        $heap_growth,
+        $old,
+        $ret,
+        $req,
+        $ret - $req);
+
+}
+
+END {
+    printf("\n监控结束\n");
+}

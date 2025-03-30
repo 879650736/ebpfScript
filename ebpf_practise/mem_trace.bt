@@ -1,1 +1,48 @@
 #!/usr/bin/bpftrace
+
+BEGIN {
+    printf("开始跟踪进程内存分配 (brk/mmap)\n");
+}
+
+tracepoint:syscalls:sys_enter_brk {
+    @old_brk[pid] = (uint64)curtask->mm->brk;
+}
+
+tracepoint:syscalls:sys_exit_brk {
+    $ret = (uint64)args->ret;
+    if ($ret < 0) {
+        delete(@old_brk[pid]);
+        return;
+    }
+    
+    $old = (uint64)@old_brk[pid];
+    if ($ret > $old) {
+        $size = $ret - $old;
+        time("%H:%M:%S ");
+        printf("进程 %s (PID %d) 通过 brk 分配了 %lu 字节\n", comm, pid, $size);
+    }
+    delete(@old_brk[pid]);
+}
+
+tracepoint:syscalls:sys_enter_mmap {
+    if (args->flags & 0x20) { // MAP_ANONYMOUS
+        @mmap_len[pid] = args->len;
+    } else {
+        @mmap_len[pid] = 0;
+    }
+}
+
+tracepoint:syscalls:sys_exit_mmap {
+    $ret = args->ret;
+    $len = @mmap_len[pid];
+    
+    if ($ret >= 0 && $len > 0) {
+        time("%H:%M:%S ");
+        printf("进程 %s (PID %d) 通过 mmap 分配了 %lu 字节\n", comm, pid, $len);
+    }
+    delete(@mmap_len[pid]);
+}
+
+END {
+    printf("\n停止跟踪\n");
+}
