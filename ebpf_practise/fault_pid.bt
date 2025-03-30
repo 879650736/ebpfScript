@@ -1,4 +1,4 @@
-#!/usr/bin/env bpftrace
+#!/usr/bin/bpftrace
 
 BEGIN {
     printf("Tracing page faults for PID %d...\n", $1);

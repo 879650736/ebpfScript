@@ -1,4 +1,4 @@
-#!/usr/local/bin/bpftrace
+#!/usr/bin/bpftrace
 
 tracepoint:vmscan:mm_shrink_slab_start{
     @start_ss[tid] = nsecs;

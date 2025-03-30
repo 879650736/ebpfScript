@@ -1,4 +1,5 @@
-#!/usr/local/bin/bpftrace
+#!/usr/bin/bpftrace
+
 
 // This program times vfs_read()
 

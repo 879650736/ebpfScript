@@ -1,4 +1,4 @@
-#!/usr/local/bin/bprtrace
+#!/usr/bin/bpftrace
 
 BEGIN{
     printf("Tracing Huge Page faults per process.. Hit Ctrl-C to end.\n");

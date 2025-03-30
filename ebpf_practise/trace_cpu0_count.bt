@@ -1,4 +1,4 @@
-#!/usr/local/bin/bpftrace
+#!/usr/bin/bpftrace
 
 // 在 CPU0 上每 10 毫秒（99Hz）采样内核调用栈，统计频率
 profile:hz:99
