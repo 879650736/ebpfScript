@@ -1,0 +1,12 @@
+#!/usr/bin/bpftrace
+
+tracepoint:vmscan:mm_shrink_slab_start{
+    @start[tid] = nsecs;
+}
+
+tracepoint:vmscan:mm_shrink_slab_end{
+    $dur = nsecs - @start[tid];
+    printf("%15s     %10d\n",comm,$dur);
+    delete(@start[tid]);
+}
+

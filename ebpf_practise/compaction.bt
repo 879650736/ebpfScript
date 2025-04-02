@@ -1,0 +1,21 @@
+#!/usr/bin/bpftrace
+
+tracepoint:compaction:mm_compaction_begin{
+    @start[tid] = nsecs;
+}
+tracepoint:compaction:mm_compaction_end
+/@start[tid]/
+{
+    $dur = nsecs - @start[tid];
+    @sum = @sum + $dur;
+    @mm_compaction_ns = hist($dur);
+    delete(@start[tid]);
+}
+
+
+interval:s:1{
+    time("%H:%M:%S");
+    printf("         %d\n",@sum);
+    clear(@sum);
+}
+    
