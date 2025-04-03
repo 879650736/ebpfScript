@@ -1,0 +1,33 @@
+#!/usr/bin/bpftrace
+
+BEGIN{
+    printf("Tracing stat syscalls...Hit Ctrl-C to end.\n");
+    printf("%-6s %-16s %3s %s\n","PID", "COMM", "ERR", "PATH");
+
+}
+
+tracepoint:syscalls:sys_enter_statfs{
+    @filename[tid] = args->pathname;
+}
+
+tracepoint:syscalls:sys_enter_statx,
+tracepoint:syscalls:sys_enter_newstat,
+tracepoint:syscalls:sys_enter_newlstat,{
+    @filename[tid] = args->filename;
+}
+
+tracepoint:syscalls:sys_exit_statfs,
+tracepoint:syscalls:sys_exit_statx,
+tracepoint:syscalls:sys_exit_newstat,
+tracepoint:syscalls:sys_exit_newlstat,
+/@filename[tid]/{
+    $ret = args->ret;
+    $error = $ret >= 0 ? 0 : -$ret;
+
+    printf("%-6d %-16s %3d %s\n", pid, comm, $error, str(@filename[tid]));
+    delete(@filename[tid]);
+}
+
+END{
+    clear(@filename);
+}
