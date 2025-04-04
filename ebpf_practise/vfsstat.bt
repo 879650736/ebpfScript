@@ -1,0 +1,23 @@
+#!/usr/bin/bpftrace
+
+BEGIN{
+    printf("Tracing key VFS calls...Hit Ctrl-C to end.\n");
+}
+
+kprobe:vfs_read*,
+kprobe:vfs_write*,
+kprobe:vfs_fsync,
+kprobe:vfs_open,
+kprobe:vfs_create{
+    @[func] = count();
+}
+
+interval:s:1{
+    time();
+    print(@);
+    clear(@);
+}
+
+END{
+    clear(@);
+}
