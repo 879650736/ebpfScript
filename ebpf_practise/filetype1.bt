@@ -1,0 +1,30 @@
+#!/usr/bin/bpftrace
+
+#include <linux/fs.h>
+
+BEGIN{
+    printf("Tracing VFS read/write ... Hit Ctrl-C to end.\n");
+    //from include/linux/fs.h
+    @type2str[0] = "UNKNOWN";
+    @type2str[1] = "FIFO";
+    @type2str[2] = "CHR";
+    @type2str[4] = "DIR";
+    @type2str[6] = "BLK";
+    @type2str[8] = "REG";
+    @type2str[10] = "LNK";
+    @type2str[12] = "SOCK";
+    @type2str[14] = "WHT";
+}
+
+kprobe:vfs_read,
+kprobe:vfs_readv,
+kprobe:vfs_write,
+kprobe:vfs_writev{
+    $file = (struct file *)arg0;
+    $type = ($file ->f_inode -> i_mode >> 12) & 15;
+    @[@type2str[$type], func, comm] = count();
+}
+
+END{
+    clear(@type2str);
+}
