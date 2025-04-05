@@ -1,0 +1,29 @@
+#!/usr/bin/bpftrace
+
+BEGIN{
+    printf("Tracing ext4 operation latency ... Hit Ctrl-C to end.\n");
+}
+
+kprobe:ext4_file_read_iter,
+kprobe:ext4_file_write_iter,
+kprobe:ext4_file_open,
+kprobe:ext4_sync_file,
+{
+    @start[tid] = nsecs;
+    @name[tid] = func;
+}
+
+kretprobe:ext4_file_read_iter,
+kretprobe:ext4_file_write_iter,
+kretprobe:ext4_file_open,
+kretprobe:ext4_sync_file,
+/@start[tid]/{
+    @us[@name[tid]] = hist((nsecs - @start[tid]) / 1000);
+    delete(@start[tid]);
+    delete(@name[tid]);
+}
+
+END{
+    clear(@start);
+    clear(@name);
+}

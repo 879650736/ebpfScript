@@ -1,0 +1,29 @@
+#!/usr/bin/bpftrace
+
+BEGIN{
+    printf("Tracing icache lookups ... Hit Ctrl-C to end.\n");
+    printf("%10s %10s %5s\n", "REFS", "MISSES", "HIT%");
+}
+
+kretprobe:find_inode_fast{
+    @refs++;
+    if (retval == 0) {
+        @misses++;
+    }
+}
+
+interval:s:1
+{
+    $refs = @refs;     // 临时保存当前命中次数
+    $misses = @misses; // 临时保存当前未命中次数
+    $hits = $refs - $misses;
+    $percent = $refs > 0  ? 100 * $hits / $refs : 0;
+    printf("%10d %10d %4d\n", $refs, $misses, $percent);
+    clear(@misses);
+    clear(@refs);
+}
+
+END{
+    clear(@misses);
+    clear(@refs);
+}
