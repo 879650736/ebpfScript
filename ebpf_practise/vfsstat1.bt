@@ -1,0 +1,149 @@
+#!/usr/bin/bpftrace
+
+#include <linux/fs.h>
+
+BEGIN{
+    printf("%-9s %-20s %-8s %-8s %-8s %-8s %s\n", "TIME", "FS", "READ/s", "WRITE/s",
+    "CREATE/s", "OPEN/s", "FSYNC/s");
+}
+
+kprobe:vfs_read*,
+kprobe:vfs_write*,
+kprobe:vfs_fsync,
+kprobe:vfs_open,
+kprobe:vfs_create{
+    @file[tid] = arg0;
+}
+
+
+kretprobe:vfs_read*
+/@file[tid]/{
+    if(retval >= 0){
+        $file = (struct file *)@file[tid];
+        $name = $file->f_path.dentry->d_name.name;
+        $fs = $file->f_path.mnt->mnt_sb->s_type->name;
+        if((($file->f_inode->i_mode >> 12) & 15) == DT_FIFO){
+            @all["read", "FIFO", $fs] = count();
+        } else{
+            @all["read",str($name), $fs] = count();
+        }
+        
+    }
+    delete(@file[tid]);
+}
+kretprobe:vfs_write*
+/@file[tid]/{
+    if(retval >= 0){
+        $file = (struct file *)@file[tid];
+        $name = $file->f_path.dentry->d_name.name;
+        $fs = $file->f_path.mnt->mnt_sb->s_type->name;
+        if((($file->f_inode->i_mode >> 12) & 15) == DT_FIFO){
+            @all["write", "FIFO", $fs] = count();
+        } else{
+            @all["write",str($name), $fs] = count();
+        }
+        
+    }
+    delete(@file[tid]);
+}
+kretprobe:vfs_fsync
+/@file[tid]/{
+    if(retval >= 0){
+        $file = (struct file *)@file[tid];
+        $name = $file->f_path.dentry->d_name.name;
+        $fs = $file->f_path.mnt->mnt_sb->s_type->name;
+        if((($file->f_inode->i_mode >> 12) & 15) == DT_FIFO){
+            @all["fsync", "FIFO", $fs] = count();
+        } else{
+            @all["fsync",str($name), $fs] = count();
+        }
+        
+    }
+    delete(@file[tid]);
+}
+kretprobe:vfs_open
+/@file[tid]/{
+    if(retval >= 0){
+        $file = (struct file *)@file[tid];
+        $name = $file->f_path.dentry->d_name.name;
+        $fs = $file->f_path.mnt->mnt_sb->s_type->name;
+        if((($file->f_inode->i_mode >> 12) & 15) == DT_FIFO){
+            @all["open", "FIFO", $fs] = count();
+        } else{
+            @all["open",str($name), $fs] = count();
+        }
+        
+    }
+    delete(@file[tid]);
+}
+
+kretprobe:vfs_create
+/@file[tid]/{
+    if(retval >= 0){
+        $file = (struct file *)@file[tid];
+        $name = $file->f_path.dentry->d_name.name;
+        $fs = $file->f_path.mnt->mnt_sb->s_type->name;
+        if((($file->f_inode->i_mode >> 12) & 15) == DT_FIFO){
+            @all["create", "FIFO", $fs] = count();
+        } else{
+            @all["create",str($name), $fs] = count();
+        }
+        
+    }
+    delete(@file[tid]);
+}
+
+interval:s:1{
+    $timestamp = nsecs / 1000000000;
+    $time_str = strftime("%H:%M:%S", $timestamp);
+
+    for ($kv : @all) {
+        $func = $kv.0.0;
+        $name = $kv.0.1;
+        $fs = $kv.0.2;
+        $count = $kv.1;
+
+        if (!@reads[$name]) { @reads[$name] = 0; }
+        if (!@writes[$name]) { @writes[$name] = 0; }
+        if (!@create[$name]) { @create[$name] = 0; }
+        if (!@opens[$name]) { @opens[$name] = 0; }
+        if (!@fsyncs[$name]) { @fsyncs[$name] = 0; }
+
+        if ($func == "read" ) {
+            @reads[$name] = (uint64)$count;
+        } else if ($func == "write") {
+            @writes[$name] = (uint64)$count;
+        } else if ($func == "open") {
+            @opens[$name] =  (uint64)$count;
+        } else if ($func == "create") {
+            @create[$name] = (uint64)$count;
+        } else if ($func == "fsync") {
+            @fsyncs[$name] =  (uint64)$count;
+        }
+    }
+
+    // Print results
+    for ($a : @all) {
+        $name = $a.0.1;
+        printf("%-9s %-20s %-8d %-8d %-8d %-8d %-8d\n", 
+            $time_str,
+            $name,
+            @reads[$name],
+            @writes[$name],
+            @create[$name],
+            @opens[$name],
+            @fsyncs[$name]
+        );
+    }
+    clear(@all);
+    clear(@reads);
+    clear(@writes);
+    clear(@create);
+    clear(@opens);
+    clear(@fsyncs);
+}
+
+END{
+    clear(@all);
+    clear(@file);
+}

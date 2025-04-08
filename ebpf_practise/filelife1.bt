@@ -1,0 +1,20 @@
+#!/usr/bin/bpftrace
+
+#include<linux/fs.h>
+
+BEGIN{
+    printf("%-6s %-16s %8s %s\n", "PID", "COMM", "AGE(ms)", "FILE");
+}
+
+tracepoint:syscalls:sys_enter_creat{
+    @birth[pid] = nsecs;
+    }
+
+tracepoint:syscalls:sys_enter_unlink
+/@birth[pid]/{
+    $dur = nsecs - @birth[pid];
+    delete(@birth[pid]);
+    $path = args -> pathname;
+    printf("%-6d %-16s %8d %s\n", pid, comm, $dur/1000000,
+        str($path));
+}

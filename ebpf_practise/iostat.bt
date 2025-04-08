@@ -1,0 +1,132 @@
+#!/usr/bin/bpftrace
+
+#include <linux/fs.h>
+#include <linux/sched.h>
+#include <linux/blkdev.h>
+
+BEGIN {
+    printf("Tracing VFS and block I/O... Hit Ctrl-C to end.\n");
+}
+
+// VFS层跟踪
+kprobe:vfs_read,
+kprobe:vfs_write 
+{
+    $file = (struct file *)arg0;
+    $path = str($file->f_path.dentry->d_name.name);
+    $inode = $file->f_path.dentry->d_inode->i_ino;
+    $size = arg2;
+    
+    @vfs_ops[pid, comm, $inode, $path, func] = count();
+    @vfs_bytes[pid, comm, $inode, $path, func] = sum($size);
+    
+    printf("VFS %s: pid=%d comm=%s inode=%lu file=%s size=%d\n", 
+        func, pid, comm, $inode, $path, $size);
+}
+
+// Block层跟踪 - 请求发出
+tracepoint:block:block_rq_issue
+{
+    $dev = args->dev;
+    $sector = args->sector;
+    $nr_sector = args->nr_sector;
+    $bytes = $nr_sector * 512;
+    $rwbs = args->rwbs;
+    
+    @block_issue[$dev, $sector] = $bytes;
+    
+    printf("BLOCK ISSUE: dev=%d/%d sector=%lu bytes=%d rwbs=%s\n", 
+        $dev >> 20, $dev & ((1 << 20) - 1), 
+        $sector, $bytes, $rwbs);
+}
+
+// Block层跟踪 - 请求完成
+tracepoint:block:block_rq_complete
+{
+    $bytes = args->nr_sector * 512;
+    $dev = args->dev;
+    $sector = args->sector;
+    $rwbs = args->rwbs;
+    $error = args->error;
+    
+    if ($error == 0) {
+        @block_ops[$dev, $rwbs] = count();
+        @block_bytes[$dev, $rwbs] = sum($bytes);
+        
+        $inode = @bio_to_inode[$dev, $sector];
+        if ($inode != 0) {
+            @tmp_block_to_vfs = sum($bytes);
+            printf("BLOCK COMPLETE: dev=%d/%d inode=%lu sector=%lu bytes=%d rwbs=%s\n",
+                $dev >> 20, $dev & ((1 << 20) - 1),
+                $inode, $sector, $bytes, $rwbs);
+        } else {
+            printf("BLOCK COMPLETE: dev=%d/%d sector=%lu bytes=%d rwbs=%s\n",
+                $dev >> 20, $dev & ((1 << 20) - 1),
+                $sector, $bytes, $rwbs);
+        }
+    } else {
+        printf("BLOCK ERROR: dev=%d/%d sector=%lu error=%d rwbs=%s\n",
+            $dev >> 20, $dev & ((1 << 20) - 1),
+            $sector, $error, $rwbs);
+    }
+    
+    delete(@bio_to_inode[$dev, $sector]);
+    delete(@block_issue[$dev, $sector]);
+}
+
+// 关联VFS和Block I/O
+kprobe:submit_bio
+{
+    $bio = (struct bio *)arg0;
+    $page = $bio->bi_io_vec->bv_page;
+    if ($page != 0) {
+        $mapping = $page->mapping;
+        if ($mapping != 0) {
+            $inode = $mapping->host->i_ino;
+            $dev = $bio->bi_bdev->bd_dev;
+            $sector = $bio->bi_iter.bi_sector;
+            
+            @bio_to_inode[$dev, $sector] = $inode;
+        }
+    }
+}
+
+// 定期打印统计信息
+interval:s:5 {
+    printf("\n=== VFS I/O Statistics (last 5s) ===\n");
+    print(@vfs_ops);
+    print(@vfs_bytes);
+    
+    printf("\n=== Block I/O Statistics (last 5s) ===\n");
+    print(@block_ops);
+    print(@block_bytes);
+    
+    printf("\n=== Block to VFS Mapping (last 5s) ===\n");
+    print(@tmp_block_to_vfs);
+    
+    clear(@vfs_ops);
+    clear(@vfs_bytes);
+    clear(@block_ops);
+    clear(@block_bytes);
+    clear(@tmp_block_to_vfs);
+}
+
+END {
+    printf("\nFinal statistics:\n");
+    printf("=== VFS I/O ===\n");
+    print(@vfs_ops);
+    print(@vfs_bytes);
+    
+    printf("\n=== Block I/O ===\n");
+    print(@block_ops);
+    print(@block_bytes);
+    
+    printf("\n=== Pending Block Issues ===\n");
+    print(@block_issue);
+    
+    printf("\n=== Pending BIO to Inode Mappings ===\n");
+    print(@bio_to_inode);
+    
+    printf("\n=== Final Block to VFS Mapping ===\n");
+    print(@tmp_block_to_vfs);
+}

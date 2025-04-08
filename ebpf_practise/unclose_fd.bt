@@ -1,0 +1,32 @@
+#!/usr/bin/bpftrace
+
+BEGIN
+{
+    printf("Tracing unclosed file descriptors... Hit Ctrl-C to end.\n");
+}
+
+kretprobe:alloc_fd{
+    if(retval >= 0){
+        $fd = retval;
+        @file[pid,comm] = $fd;
+    }
+}
+
+kretprobe:close_fd{
+    if(retval >= 0){
+        delete(@file[pid,comm]);
+    }
+}
+
+END
+{
+    printf("Unclosed file descriptors:\n");
+    for ($key : @file) {
+        $fd = $key.1;
+        $pid = $key.0.0;
+        $comm = $key.0.1;
+        printf("PID: %d, Comm: %s, FD: %d\n", $pid, $comm, $fd);
+    }
+    clear(@file);
+}
+
