@@ -1,0 +1,13 @@
+#!/usr/bin/bpftrace
+
+tracepoint:sched:sched_switch
+/args->prev_state == 2/{
+    printf("sched_switch\n");
+    printf("%d -> %d\n", args->prev_pid, args->next_pid);
+    printf("%s -> %s\n", args->prev_comm, args->next_comm);
+}
+
+END
+{
+    printf("\nTracepoint sched_switch finished.\n");
+}

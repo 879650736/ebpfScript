@@ -1,0 +1,13 @@
+#!/usr/bin/bpftrace
+
+BEGIN{
+    printf("Tracing block device I/O latency... Hit Ctrl-C to end.\n"); 
+}
+
+tracepoint:block:block_rq_issue {
+    @[args->comm] = hist(args->bytes);
+}
+
+END{
+    printf("\nI/O size (byte) histograms by process name:\n");
+}

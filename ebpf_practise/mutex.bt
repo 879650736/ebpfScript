@@ -1,0 +1,16 @@
+#!/usr/bin/bpftrace
+    kprobe:mutex_lock { 
+        @start[tid,comm] = nsecs; 
+    }
+    kprobe:mutex_unlock /@start[tid,comm]/ { 
+        $dur = (nsecs - @start[tid,comm]) / 1000; 
+        if ($dur > 100) { 
+            printf("long time lock:\n kstack: %s \n ustack: %s \n(tid=%d, comm=%s, dur=%dμs)\n",
+            kstack, ustack, tid, comm, $dur);
+        }
+        @lock_dur = hist($dur); 
+        delete(@start[tid,comm]); 
+    }
+    END{
+        printf("command: %s\n", comm);
+    }
