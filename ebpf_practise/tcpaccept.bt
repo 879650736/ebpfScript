@@ -1,0 +1,20 @@
+#!/usr/bin/bpftrace
+
+#include <linux/socket.h>
+#include <net/tcp_states.h>
+
+BEGIN {
+    printf("%-8s %-3s %-14s %-5s", "TIME", "IP", "RADDR", "RPORT");
+    printf("%-14s %-5s\n", "LADDR", "LPORT");
+}
+
+tracepoint:sock:inet_sock_set_state
+/args->oldstate == TCP_SYN_RECV && args->newstate == TCP_ESTABLISHED/
+{
+    time("%H:%M:%S");
+    printf("%-3d %-14s %-5d",args->family == AF_INET ? 4 : 6, 
+        ntop(args->family, args->daddr), args->dport);
+    printf("%-14s %-5d\n", ntop(args->family, args->saddr), 
+        args->sport);
+
+}

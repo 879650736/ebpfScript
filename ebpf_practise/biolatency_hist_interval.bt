@@ -1,0 +1,24 @@
+#!/usr/bin/bpftrace
+
+BEGIN {
+    printf("Tracing block device I/O latency... Hit Ctrl-C to end.\n");
+}
+tracepoint:block:block_rq_issue{
+    @start[args->dev, args->sector] = nsecs;
+}
+
+tracepoint:block:block_rq_complete
+/@start[args->dev, args->sector]/
+{
+    @usecs = lhist((nsecs - @start[args->dev, args->sector]) / 1000, 0, 100000, 1000);
+    delete(@start[args->dev, args->sector]);
+}
+
+interval:s:1 {
+    printf("\nI/O latency histogram (in microseconds):\n");
+    print(@usecs);
+}
+
+END {
+    clear(@start);
+}

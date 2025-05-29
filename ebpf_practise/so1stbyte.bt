@@ -1,0 +1,61 @@
+#!/usr/bin/bpftrace
+
+#include <asm-generic/errno.h>
+#include <linux/in.h>
+#include <linux/fs.h>
+
+BEGIN {
+    printf("Tracing IP socket first-read-byte latency... Hit Ctrl-C to end.\n");
+}
+
+tracepoint:syscalls:sys_enter_connect
+/args->uservaddr->sa_family == AF_INET |
+    args->uservaddr->sa_family == AF_INET6/ {
+    @conn_fd[tid] = args->fd;
+    @conn_start[pid, args->fd] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_connect{
+    if(args->ret != 0 && args->ret != -EINPROGRESS) {
+        //connect() failure, delete flag if present
+        delete(@conn_start[pid, @conn_fd[tid]]);
+    }
+    delete(@conn_fd[tid]);
+}
+tracepoint:syscalls:sys_enter_close
+/@conn_start[pid, args->fd]/
+{
+    //never called read
+    delete(@conn_start[pid, args->fd]);
+}
+
+tracepoint:syscalls:sys_enter_read,
+tracepoint:syscalls:sys_enter_readv,
+tracepoint:syscalls:sys_enter_pread*,
+tracepoint:syscalls:sys_enter_recvfrom,
+tracepoint:syscalls:sys_enter_recvmsg,
+tracepoint:syscalls:sys_enter_recvmmsg
+/@conn_start[pid, args->fd]/
+{
+    @read_fd[tid] = args->fd;
+}
+
+tracepoint:syscalls:sys_exit_read,
+tracepoint:syscalls:sys_exit_readv,
+tracepoint:syscalls:sys_exit_pread*,
+tracepoint:syscalls:sys_exit_recvfrom,
+tracepoint:syscalls:sys_exit_recvmsg,
+tracepoint:syscalls:sys_exit_recvmmsg
+/@read_fd[tid]/
+{
+    $fd = @read_fd[tid];
+    @us[comm, pid] = hist((nsecs - @conn_start[pid, $fd]) / 1000);
+    delete(@conn_start[pid, $fd]);
+    delete(@read_fd[tid]);
+}
+
+END{
+    clear(@conn_start);
+    clear(@conn_fd);
+    clear(@read_fd);
+}
